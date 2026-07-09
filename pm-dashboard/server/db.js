@@ -119,6 +119,27 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS agent_tasks (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id    TEXT    NOT NULL,
+    title       TEXT    NOT NULL,
+    description TEXT,
+    status      TEXT    NOT NULL DEFAULT 'pending'
+                      CHECK (status IN ('pending', 'in_progress', 'completed', 'failed')),
+    input_data  TEXT,
+    output_data TEXT,
+    assignee    TEXT,
+    priority    TEXT    NOT NULL DEFAULT 'medium'
+                      CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
+    created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  )
+`);
+
+db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_tasks_agent_id ON agent_tasks(agent_id)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_tasks_status   ON agent_tasks(status)`);
+
 // ── Indexes ────────────────────────────────────────────────────────────
 // projects
 db.exec(`CREATE INDEX IF NOT EXISTS idx_projects_workspace_id ON projects(workspace_id)`);

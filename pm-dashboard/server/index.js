@@ -286,6 +286,63 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
   res.json({ projects, myTasks });
 });
 
+// ===== AGENT TASKS =====
+app.get('/api/agents/:agentId/tasks', requireAuth, (req, res) => {
+  const { agentId } = req.params;
+  const { status } = req.query;
+  let q = 'SELECT * FROM agent_tasks WHERE agent_id = ?';
+  const params = [agentId];
+  if (status) { q += ' AND status = ?'; params.push(status); }
+  q += ' ORDER BY created_at DESC';
+  const rows = db.prepare(q).all(...params);
+  res.json({ data: rows });
+});
+
+app.post('/api/agents/:agentId/tasks', requireAuth, (req, res) => {
+  const { agentId } = req.params;
+  const { title, description, input_data, assignee, priority } = req.body || {};
+  if (!title) return res.status(400).json({ error: 'Title required' });
+  const info = db.prepare(
+    'INSERT INTO agent_tasks (agent_id, title, description, input_data, assignee, priority) VALUES (?,?,?,?,?,?)'
+  ).run(agentId, title, description || null, input_data || null, assignee || null, priority || 'medium');
+  const row = db.prepare('SELECT * FROM agent_tasks WHERE id = ?').get(info.lastInsertRowid);
+  res.status(201).json({ data: row });
+});
+
+app.put('/api/agents/tasks/:id', requireAuth, (req, res) => {
+  const existing = db.prepare('SELECT * FROM agent_tasks WHERE id = ?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Task not found' });
+  const { title, description, status, input_data, output_data, assignee, priority } = req.body || {};
+  const sets = []; const vals = [];
+  if (title) { sets.push('title = ?'); vals.push(title); }
+  if (description !== undefined) { sets.push('description = ?'); vals.push(description); }
+  if (status) { sets.push('status = ?'); vals.push(status); }
+  if (input_data !== undefined) { sets.push('input_data = ?'); vals.push(input_data); }
+  if (output_data !== undefined) { sets.push('output_data = ?'); vals.push(output_data); }
+  if (assignee !== undefined) { sets.push('assignee = ?'); vals.push(assignee); }
+  if (priority) { sets.push('priority = ?'); vals.push(priority); }
+  if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
+  sets.push('updated_at = strftime(\'%Y-%m-%dT%H:%M:%fZ\', \'now\')');
+  vals.push(req.params.id);
+  db.prepare(`UPDATE agent_tasks SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  const row = db.prepare('SELECT * FROM agent_tasks WHERE id = ?').get(req.params.id);
+  res.json({ data: row });
+});
+
+app.delete('/api/agents/tasks/:id', requireAuth, (req, res) => {
+  const existing = db.prepare('SELECT * FROM agent_tasks WHERE id = ?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Task not found' });
+  db.prepare('DELETE FROM agent_tasks WHERE id = ?').run(req.params.id);
+  res.json({ success: true });
+});
+
+app.get('/api/agents/summary', requireAuth, (req, res) => {
+  const rows = db.prepare(
+    'SELECT agent_id, COUNT(*) AS total, SUM(CASE WHEN status = \'completed\' THEN 1 ELSE 0 END) AS done, SUM(CASE WHEN status = \'in_progress\' THEN 1 ELSE 0 END) AS in_progress, SUM(CASE WHEN status = \'failed\' THEN 1 ELSE 0 END) AS failed FROM agent_tasks GROUP BY agent_id'
+  ).all();
+  res.json({ data: rows });
+});
+
 // ===== SEARCH =====
 app.get('/api/search', requireAuth, (req, res) => {
   const { q } = req.query;

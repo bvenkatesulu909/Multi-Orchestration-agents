@@ -12,9 +12,10 @@ const AGENTS = [
   { id: 'memory', name: 'Memory Agent', icon: '🧠', color: '#06b6d4', desc: 'Documents project state, decisions, and context across sessions.' },
 ];
 
+const MOCK = { projects: [], myTasks: [] };
 export default function Dashboard({ setView, setSelProject }) {
   const [data, setData] = useState(null);
-  useEffect(() => { api('/dashboard').then(d => setData(d)).catch(() => {}); }, []);
+  useEffect(() => { api('/dashboard').then(d => setData(d)).catch(() => setData(MOCK)); }, []);
 
   if (!data) return <div className="loading">Loading dashboard…</div>;
 
