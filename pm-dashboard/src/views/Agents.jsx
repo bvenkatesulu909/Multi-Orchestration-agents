@@ -31,20 +31,20 @@ export default function Agents() {
 
   const loadTasks = useCallback(async () => {
     try {
-      const [tRes, sRes] = await Promise.all([
+      const [tRes, aRes] = await Promise.all([
         api(`/agents/${selected}/tasks`),
-        api('/agents/summary'),
+        api('/agents'),
       ]);
       setTasks(tRes.data || []);
       const s = {};
-      (sRes.data || []).forEach(r => { s[r.agent_id] = r; });
+      (aRes.data || []).forEach(r => { s[r.id] = r; });
       setSummary(s);
     } catch {
       setTasks([]);
     }
   }, [selected]);
 
-  useEffect(() => { loadTasks(); }, [loadTasks]);
+  useEffect(() => { loadTasks(); const iv = setInterval(loadTasks, 3000); return () => clearInterval(iv); }, [loadTasks]);
 
   const activeAgent = AGENTS.find(a => a.id === selected);
   const agentSummary = summary[selected] || { total: 0, done: 0, in_progress: 0, failed: 0 };
@@ -236,35 +236,6 @@ export default function Agents() {
             </table>
           </div>
         )}
-
-        {/* Workflow Visualization */}
-        <div className="card" style={{ marginTop: 18 }}>
-          <div className="card-header"><h3>🏗️ Agent Workflow Pipeline</h3></div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0, flexWrap: 'wrap', padding: '16px 0' }}>
-            {AGENTS.map((a, i) => (
-              <React.Fragment key={a.id}>
-                <div onClick={() => setSelected(a.id)} style={{
-                  cursor: 'pointer',
-                  background: a.color + '15',
-                  border: `2px solid ${selected === a.id ? a.color : a.color + '30'}`,
-                  borderRadius: 10, padding: '10px 14px',
-                  textAlign: 'center', minWidth: 90,
-                  transform: selected === a.id ? 'scale(1.05)' : 'scale(1)',
-                  transition: 'all .15s',
-                }}>
-                  <div style={{ fontSize: 24 }}>{a.icon}</div>
-                  <div style={{ fontSize: 10, fontWeight: 600, marginTop: 4, color: a.color }}>{a.name.split(' ')[0]}</div>
-                  {(summary[a.id]?.total || 0) > 0 && (
-                    <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>{summary[a.id]?.done || 0}/{summary[a.id]?.total || 0}</div>
-                  )}
-                </div>
-                {i < AGENTS.length - 1 && (
-                  <div style={{ color: 'var(--muted)', fontSize: 16, padding: '0 4px' }}>→</div>
-                )}
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
 
         {/* All Agents Summary */}
         <div className="card" style={{ marginTop: 18 }}>
