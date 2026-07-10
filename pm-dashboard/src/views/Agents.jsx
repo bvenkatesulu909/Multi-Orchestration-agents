@@ -213,71 +213,7 @@ export default function Agents() {
           )}
         </div>
 
-        {/* Output/Log Panel for completed tasks */}
-        {tasks.filter(t => t.status === 'completed' || t.status === 'failed').length > 0 && (
-          <div className="card" style={{ marginTop: 18 }}>
-            <div className="card-header"><h3>📄 Agent Output Log</h3></div>
-            <table>
-              <thead><tr><th>Task</th><th>Status</th><th>Input</th><th>Output</th></tr></thead>
-              <tbody>
-                {tasks.filter(t => t.status === 'completed' || t.status === 'failed').slice(0, 10).map(t => (
-                  <tr key={t.id}>
-                    <td style={{ fontWeight: 500, fontSize: 12 }}>{t.title}</td>
-                    <td><Badge kind={t.status === 'completed' ? 'active' : 'high'}>{t.status}</Badge></td>
-                    <td style={{ fontSize: 11, color: 'var(--muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {t.input_data || '—'}
-                    </td>
-                    <td style={{ fontSize: 11, color: 'var(--muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {t.output_data || '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* All Agents Summary */}
-        <div className="card" style={{ marginTop: 18 }}>
-          <div className="card-header"><h3>📊 All Agents — Task Summary</h3></div>
-          <table className="compact">
-            <thead><tr><th>Agent</th><th>Role</th><th>Total</th><th>Done</th><th>In Progress</th><th>Failed</th><th>Status</th></tr></thead>
-            <tbody>
-              {AGENTS.map(a => {
-                const s = summary[a.id] || { total: 0, done: 0, in_progress: 0, failed: 0 };
-                const total = s.total || 0;
-                const pct = total > 0 ? Math.round((s.done / total) * 100) : 0;
-                return (
-                  <tr key={a.id} onClick={() => setSelected(a.id)} style={{ cursor: 'pointer' }}>
-                    <td style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>{a.icon}</span>
-                      <span style={{ fontWeight: 500 }}>{a.name.split(' ')[0]}</span>
-                    </td>
-                    <td style={{ color: 'var(--muted)', fontSize: 12 }}>{a.role}</td>
-                    <td style={{ fontWeight: 600 }}>{total}</td>
-                    <td style={{ color: 'var(--success)', fontWeight: 600 }}>{s.done}</td>
-                    <td style={{ color: '#3b82f6' }}>{s.in_progress}</td>
-                    <td style={{ color: s.failed > 0 ? 'var(--danger)' : 'var(--muted)' }}>{s.failed}</td>
-                    <td>
-                      {total > 0 ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <div style={{ width: 60, height: 4, background: 'var(--bg)', borderRadius: 2, overflow: 'hidden' }}>
-                            <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? 'var(--success)' : 'var(--primary)', borderRadius: 2, transition: 'width .3s' }} />
-                          </div>
-                          <span style={{ fontSize: 11, color: 'var(--muted)' }}>{pct}%</span>
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>Idle</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
         </div>
-
-      </div>
 
       {/* Create Modal */}
       {showCreate && (

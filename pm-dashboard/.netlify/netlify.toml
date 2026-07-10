@@ -1,10 +1,8 @@
+functionsDirectory = "C:\\Users\\User\\pm-dashboard\\netlify\\functions"
+functionsDirectoryOrigin = "config-v1"
 redirectsOrigin = "config"
 plugins = []
 headers = []
-
-[functions]
-
-[functions."*"]
 
 [build]
 publish = "C:\\Users\\User\\pm-dashboard\\dist"
@@ -12,6 +10,7 @@ publishOrigin = "config"
 commandOrigin = "config"
 base = "C:\\Users\\User\\pm-dashboard"
 command = "npm run build"
+functions = "C:\\Users\\User\\pm-dashboard\\netlify\\functions"
 
 [build.environment]
 
@@ -27,9 +26,25 @@ command = "npm run build"
 
 [build.services]
 
+[functions]
+
+[functions."*"]
+
 [[redirects]]
 from = "/api/*"
-to = "https://multi-orchestration-agents.onrender.com/api/:splat"
+to = "/.netlify/functions/api/:splat"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
 status = 200.0
 force = false
 

@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const DATA_FILE = path.join(__dirname, '..', '..', 'data', 'agent-tasks.json');
+const DATA_FILE = '/tmp/agent-tasks.json';
 
 // ── Persistence ──────────────────────────────────────────────────────────
 function readTasks() {
