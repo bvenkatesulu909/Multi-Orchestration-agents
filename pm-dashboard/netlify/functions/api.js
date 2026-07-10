@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { executeAgentWithLLM, retrieveRelevantDocs, addKnowledgeDoc, KNOWLEDGE_DOCS, generateFallbackOutput } = require('./llm.js');
 
 const DATA_FILE = '/tmp/agent-tasks.json';
 
@@ -17,8 +18,6 @@ function readTasks() {
 }
 
 function writeTasks(tasks) {
-  const dir = path.dirname(DATA_FILE);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(DATA_FILE, JSON.stringify(tasks, null, 2), 'utf-8');
 }
 
@@ -35,41 +34,6 @@ const AGENTS = [
   { id: 'worker',      name: 'Worker Agent',       icon: '🔧', color: '#8b5cf6', role: 'Operator' },
   { id: 'memory',      name: 'Memory Agent',       icon: '🧠', color: '#06b6d4', role: 'Archivist' },
 ];
-
-// ── Agent Logic (deterministic, no API key needed) ────────────────────────
-function executeAgent(agentId, task) {
-  const outputs = {
-    manager:     `✓ Task decomposed into ${Math.max(1, Math.floor(Math.random() * 4) + 2)} subtasks\n` +
-                 `  Subtasks assigned to: Planning, Research, Coding, Worker`,
-    planner:     `📋 Implementation plan generated:\n` +
-                 `  Phase 1: Requirements analysis\n` +
-                 `  Phase 2: Architecture design\n` +
-                 `  Phase 3: Implementation\n` +
-                 `  Phase 4: Testing & deployment`,
-    research:    `🔍 Research findings for "${task.title}":\n` +
-                 `  • Best practices identified\n` +
-                 `  • 3 API alternatives found\n` +
-                 `  • Performance benchmarks: 230ms avg latency`,
-    coding:      `💻 Code generated for "${task.title}":\n` +
-                 `  src/features/${task.title.toLowerCase().replace(/\s+/g, '-')}/index.js\n` +
-                 `  src/features/${task.title.toLowerCase().replace(/\s+/g, '-')}/styles.css\n` +
-                 `  Tests written: 4 passing, 0 failing`,
-    specialized: `🎯 Expert analysis for "${task.title}":\n` +
-                 `  • Security: No vulnerabilities detected\n` +
-                 `  • Performance: Optimized query plan\n` +
-                 `  • Accessibility: WCAG 2.1 AA compliant`,
-    worker:      `🔧 Execution results for "${task.title}":\n` +
-                 `  ✓ Dependencies installed (0 vulnerabilities)\n` +
-                 `  ✓ Build passed (2.3s)\n` +
-                 `  ✓ Tests: 12/12 passing\n` +
-                 `  ✓ Deployed to staging`,
-    memory:      `🧠 State saved for "${task.title}":\n` +
-                 `  Session: ${new Date().toISOString().split('T')[0]}\n` +
-                 `  Context: Task completed across ${Math.floor(Math.random() * 3) + 2} agents\n` +
-                 `  Artifacts: 3 files created, 2 modified`,
-  };
-  return outputs[agentId] || `✓ Agent ${agentId} processed task: ${task.title}`;
-}
 
 // ── Route handler ─────────────────────────────────────────────────────────
 exports.handler = async (event) => {
@@ -105,6 +69,27 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers, body: JSON.stringify({ data: agentsWithStats }) };
     }
 
+    // GET /api/agents/rag — list RAG knowledge documents
+    if (method === 'GET' && pathParts[0] === 'rag' && pathParts.length === 1) {
+      return { statusCode: 200, headers, body: JSON.stringify({ data: KNOWLEDGE_DOCS.map(d => ({ id: d.id, title: d.title, tags: d.tags })) }) };
+    }
+
+    // POST /api/agents/rag — add knowledge document
+    if (method === 'POST' && pathParts[0] === 'rag' && pathParts.length === 1) {
+      const { title, content, tags } = body;
+      if (!title || !content) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Title and content required' }) };
+      const doc = addKnowledgeDoc(title, content, tags || []);
+      return { statusCode: 201, headers, body: JSON.stringify({ data: doc }) };
+    }
+
+    // GET /api/agents/rag/search — search knowledge
+    if (method === 'GET' && pathParts[0] === 'rag' && pathParts[1] === 'search') {
+      const query = event.queryStringParameters?.q || '';
+      if (!query) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Query required' }) };
+      const results = retrieveRelevantDocs(query, 5);
+      return { statusCode: 200, headers, body: JSON.stringify({ data: results }) };
+    }
+
     // GET /api/agents/stats — aggregate stats
     if (method === 'GET' && pathParts[0] === 'stats') {
       const tasks = readTasks();
@@ -126,7 +111,7 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers, body: JSON.stringify({ data: tasks }) };
     }
 
-    // POST /api/agents/:agentId/tasks — create task & auto-execute
+    // POST /api/agents/:agentId/tasks — create task & execute via LLM
     if (method === 'POST' && pathParts.length === 2 && pathParts[1] === 'tasks') {
       const agentId = pathParts[0];
       const { title, description, input_data, assignee, priority } = body;
@@ -143,16 +128,52 @@ exports.handler = async (event) => {
         priority: priority || 'medium',
         status: 'in_progress',
         output_data: null,
+        model_used: null,
+        rag_used: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-
-      // Simulate agent execution (async via setTimeout, but we return the result immediately)
-      task.output_data = executeAgent(agentId, task);
-      task.status = 'completed';
       tasks.push(task);
       writeTasks(tasks);
 
+      // Execute agent with real LLM + RAG
+      try {
+        const result = await executeAgentWithLLM(agentId, task);
+        task.output_data = result.content;
+        task.model_used = result.model;
+        task.rag_used = !!result.ragContext;
+        task.status = 'completed';
+        task.updated_at = new Date().toISOString();
+        
+        // If Manager, also create subtasks for other agents
+        if (agentId === 'manager' && task.output_data) {
+          const subtaskAgents = ['planner', 'research', 'coding', 'worker'];
+          for (const subAgentId of subtaskAgents) {
+            const subTask = {
+              id: genId(),
+              agent_id: subAgentId,
+              title: `Subtask: ${task.title} — ${subAgentId}`,
+              description: `Auto-generated subtask from Manager: ${task.output_data.substring(0, 200)}`,
+              input_data: task.output_data,
+              assignee: subAgentId,
+              priority: task.priority,
+              status: 'pending',
+              output_data: null,
+              model_used: null,
+              rag_used: false,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+            tasks.push(subTask);
+          }
+        }
+      } catch (err) {
+        task.status = 'failed';
+        task.output_data = `Error: ${err.message}`;
+        task.updated_at = new Date().toISOString();
+      }
+
+      writeTasks(tasks);
       return { statusCode: 201, headers, body: JSON.stringify({ data: task }) };
     }
 
@@ -174,12 +195,18 @@ exports.handler = async (event) => {
       if (priority) tasks[idx].priority = priority;
       tasks[idx].updated_at = new Date().toISOString();
 
-      // If status changed to in_progress, auto-execute the agent
-      if (status === 'in_progress' || (status === 'pending' && tasks[idx].status !== 'completed')) {
-        const agent = AGENTS.find(a => a.id === tasks[idx].agent_id);
-        if (agent) {
-          tasks[idx].output_data = executeAgent(agent.id, tasks[idx]);
+      // If status changed to in_progress, execute via LLM
+      if (status === 'in_progress' && tasks[idx].status !== 'completed') {
+        try {
+          const result = await executeAgentWithLLM(tasks[idx].agent_id, tasks[idx]);
+          tasks[idx].output_data = result.content;
+          tasks[idx].model_used = result.model;
+          tasks[idx].rag_used = !!result.ragContext;
           tasks[idx].status = 'completed';
+          tasks[idx].updated_at = new Date().toISOString();
+        } catch (err) {
+          tasks[idx].status = 'failed';
+          tasks[idx].output_data = `Error: ${err.message}`;
           tasks[idx].updated_at = new Date().toISOString();
         }
       }
